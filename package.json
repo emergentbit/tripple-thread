@@ -1,0 +1,31 @@
+{
+  "name": "tripple-thread",
+  "version": "0.1.0",
+  "description": "A semantic data graph system using RDF and SQLite",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "scripts": {
+    "build": "tsc",
+    "test": "jest",
+    "test:coverage": "jest --coverage",
+    "test:watch": "jest --watch",
+    "start": "ts-node src/index.ts"
+  },
+  "dependencies": {
+    "better-sqlite3": "^9.4.3",
+    "rdf-data-factory": "^1.1.2",
+    "rdf-parse": "^2.3.2",
+    "rdf-serialize": "^2.2.2",
+    "stream-to-string": "^1.2.1"
+  },
+  "devDependencies": {
+    "@types/better-sqlite3": "^7.6.9",
+    "@types/jest": "^29.5.12",
+    "@types/node": "^20.11.24",
+    "@types/sqlite3": "^5.1.0",
+    "jest": "^29.7.0",
+    "ts-jest": "^29.1.2",
+    "ts-node": "^10.9.2",
+    "typescript": "^5.3.3"
+  }
+}
