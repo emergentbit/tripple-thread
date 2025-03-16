@@ -1,6 +1,6 @@
 {
   "name": "@emergentbit/tripple-thread",
-  "version": "0.3.3",
+  "version": "0.3.4",
   "description": "A semantic data graph system using RDF and SQLite",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
