@@ -1,5 +1,6 @@
 import os from 'os';
 import path from 'path';
+import { Database } from 'sqlite3';
 import { DatabaseError } from '../types/Errors';
 import { ConnectionPool, WriteQueue } from '../utils/ConnectionPool';
 
@@ -26,19 +27,19 @@ type SqlCallback = (err: Error | null) => void;
 type QueryCallback = (err: Error | null, rows: unknown[] | unknown | null) => void;
 
 // Create synchronous mock methods
-const mockExec = jest.fn().mockImplementation((sql: string, callback: SqlCallback) => {
+const mockExec = jest.fn().mockImplementation((_sql: string, callback: SqlCallback) => {
   callback(null);
 });
 const mockClose = jest.fn().mockImplementation((callback: SqlCallback) => {
   callback(null);
 });
-const mockAll = jest.fn().mockImplementation((sql: string, params: unknown[], callback: QueryCallback) => {
+const mockAll = jest.fn().mockImplementation((_sql: string, _params: unknown[], callback: QueryCallback) => {
   callback(null, []);
 });
-const mockRun = jest.fn().mockImplementation((sql: string, params: unknown[], callback: SqlCallback) => {
+const mockRun = jest.fn().mockImplementation((_sql: string, _params: unknown[], callback: SqlCallback) => {
   callback(null);
 });
-const mockGet = jest.fn().mockImplementation((sql: string, callback: QueryCallback) => {
+const mockGet = jest.fn().mockImplementation((_sql: string, callback: QueryCallback) => {
   callback(null, { value: 1 });
 });
 const mockConfigure = jest.fn().mockImplementation((option: string, value: number) => {
@@ -57,7 +58,7 @@ const createMockDb = () => {
     run: mockRun,
     get: mockGet,
     configure: mockConfigure,
-    on: jest.fn().mockImplementation((event: string, handler: (err: Error) => void) => db)
+    on: jest.fn().mockImplementation((_event: string, _handler: (err: Error) => void) => db)
   };
   return db;
 };
@@ -136,7 +137,7 @@ describe('ConnectionPool', () => {
 
   it('should handle initialization errors', async () => {
     const sqlite3 = jest.requireMock('sqlite3');
-    sqlite3.Database.mockImplementationOnce((path: string, callback?: (err: Error | null, db: any) => void) => {
+    sqlite3.Database.mockImplementationOnce((_path: string, callback?: (err: Error | null, db: any) => void) => {
       if (callback) callback(new Error('Failed to initialize'), null);
       throw new Error('Failed to initialize');
     });
@@ -197,6 +198,7 @@ describe('ConnectionPool', () => {
 
     // Remove the connection from the pool to force close
     pool['availableConnections'] = [];
+    pool['maxConnections'] = 0;
 
     // First operation succeeds, but release fails
     await expect(pool.release(db)).rejects.toThrow('Failed to close connection: Release error');
@@ -272,19 +274,18 @@ describe('ConnectionPool', () => {
 
   it('should handle database errors during operation', async () => {
     await pool.initialize();
-    const db = pool['availableConnections'][0];
+    const db: Database = pool['availableConnections'][0];
 
     // Mock the get method to always fail
     const mockDbError = new Error('Database error');
-    db.get = jest.fn().mockImplementation((sql: string, callback: QueryCallback) => {
-      if (typeof callback === 'function') {
-        callback(mockDbError, null);
-      }
+    const dbSpy = jest.spyOn(db, 'get');
+    dbSpy.mockImplementation((_sql: string, ..._params: any[]) => {
+      throw mockDbError;
     });
 
-    await expect(pool.withConnection(async (conn) => {
+    const actionCallback = async (db: Database) => {
       return new Promise((resolve, reject) => {
-        conn.get('SELECT 1', (err) => {
+        db.get('SELECT 1', (err: Error | null) => {
           if (err) {
             reject(new DatabaseError(err.message));
             return;
@@ -292,7 +293,8 @@ describe('ConnectionPool', () => {
           resolve({ value: 1 });
         });
       });
-    })).rejects.toThrow('Database error');
+    }
+    await expect(pool.withConnection(actionCallback)).rejects.toThrow('Database error');
   });
 });
 
