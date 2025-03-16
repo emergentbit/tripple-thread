@@ -1,6 +1,6 @@
 {
   "name": "@emergentbit/tripple-thread",
-  "version": "0.3.1",
+  "version": "0.3.2",
   "description": "A semantic data graph system using RDF and SQLite",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
@@ -37,12 +37,12 @@
   "license": "MIT",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/kuccello/tripple-thread.git"
+    "url": "git+https://github.com/emergentbit/tripple-thread.git"
   },
   "bugs": {
-    "url": "https://github.com/kuccello/tripple-thread/issues"
+    "url": "https://github.com/emergentbit/tripple-thread/issues"
   },
-  "homepage": "https://github.com/kuccello/tripple-thread#readme",
+  "homepage": "https://github.com/emergentbit/tripple-thread#readme",
   "dependencies": {
     "better-sqlite3": "^9.4.3",
     "rdf-data-factory": "^1.1.2",
