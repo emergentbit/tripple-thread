@@ -1,0 +1,26 @@
+# Source
+src/
+
+# Tests
+__tests__/
+coverage/
+*.test.ts
+jest.config.js
+jest.setup.js
+
+# Development configs
+.gitignore
+.npmignore
+tsconfig.json
+.github/
+.vscode/
+
+# Examples and docs
+examples/
+docs/
+
+# Misc
+*.log
+.DS_Store
+semantic.db
+backups/

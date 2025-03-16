@@ -1,16 +1,48 @@
 {
-  "name": "tripple-thread",
-  "version": "0.1.0",
+  "name": "@emergentbit/tripple-thread",
+  "version": "0.3.1",
   "description": "A semantic data graph system using RDF and SQLite",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
+  "files": [
+    "dist",
+    "LICENSE",
+    "README.md"
+  ],
+  "publishConfig": {
+    "access": "public"
+  },
   "scripts": {
     "build": "tsc",
     "test": "jest",
     "test:coverage": "jest --coverage",
     "test:watch": "jest --watch",
-    "start": "ts-node src/index.ts"
+    "start": "ts-node src/index.ts",
+    "prepublishOnly": "npm run test && npm run build",
+    "prepare": "npm run build",
+    "preversion": "npm run test",
+    "version": "git add -A src",
+    "postversion": "git push && git push --tags"
   },
+  "keywords": [
+    "rdf",
+    "semantic-web",
+    "sqlite",
+    "graph-database",
+    "typescript",
+    "database",
+    "triple-store"
+  ],
+  "author": "krispy@emergentbit.com",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/kuccello/tripple-thread.git"
+  },
+  "bugs": {
+    "url": "https://github.com/kuccello/tripple-thread/issues"
+  },
+  "homepage": "https://github.com/kuccello/tripple-thread#readme",
   "dependencies": {
     "better-sqlite3": "^9.4.3",
     "rdf-data-factory": "^1.1.2",
@@ -27,5 +59,8 @@
     "ts-jest": "^29.1.2",
     "ts-node": "^10.9.2",
     "typescript": "^5.3.3"
+  },
+  "engines": {
+    "node": ">=14.0.0"
   }
 }
