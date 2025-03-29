@@ -1,4 +1,7 @@
+import * as fs from 'fs';
+import * as path from 'path';
 import { GraphManager } from '../src';
+import { DatabaseManager } from '../src/db/DatabaseManager';
 
 /**
  * This example demonstrates how to:
@@ -9,26 +12,43 @@ import { GraphManager } from '../src';
  */
 
 async function backupRestoreExample() {
-  // Create a GraphManager with backup enabled
-  const graphManager = new GraphManager({
-    dbPath: './data/backup-example.sqlite',
-    enableBackup: true,
-    backupPath: './data/backups',
-    backupConfig: {
-      interval: 60000,     // Backup every minute (for demonstration)
-      maxBackups: 5        // Keep only last 5 backups
-    }
-  });
+  let db: DatabaseManager | null = null;
+  let graph: GraphManager | null = null;
 
   try {
-    // Initialize the database
-    await graphManager.init();
+    // Create data directories if they don't exist
+    const dataDir = './data';
+    const backupDir = './data/backups';
+    if (!fs.existsSync(dataDir)) {
+      fs.mkdirSync(dataDir);
+    }
+    if (!fs.existsSync(backupDir)) {
+      fs.mkdirSync(backupDir);
+    }
+
+    // Initialize database with backup enabled
+    db = new DatabaseManager({
+      dbPath: './data/backup-example.sqlite',
+      backup: {
+        enabled: true,
+        path: backupDir,
+        interval: 60000,     // Backup every minute (for demonstration)
+        maxBackups: 5        // Keep only last 5 backups
+      }
+    });
+
+    graph = new GraphManager(db);
+    await graph.init();
+
+    if (!graph) {
+      throw new Error('Failed to initialize graph manager');
+    }
 
     console.log('Example 1: Adding data and waiting for automatic backup');
     console.log('--------------------------------------------------');
 
     // Add some initial data
-    await graphManager.addTriple({
+    await graph.addTriple({
       subject: 'http://example.org/book1',
       predicate: 'http://example.org/title',
       object: '"The Great Gatsby"'
@@ -38,7 +58,7 @@ async function backupRestoreExample() {
     await new Promise(resolve => setTimeout(resolve, 65000)); // Wait for auto-backup
 
     // Add more data
-    await graphManager.addTriple({
+    await graph.addTriple({
       subject: 'http://example.org/book1',
       predicate: 'http://example.org/author',
       object: '"F. Scott Fitzgerald"'
@@ -48,11 +68,11 @@ async function backupRestoreExample() {
     console.log('----------------------');
 
     // Trigger a manual backup
-    await graphManager.backup();
+    await graph.backup();
     console.log('Manual backup completed');
 
     // Add more data
-    await graphManager.addTriple({
+    await graph.addTriple({
       subject: 'http://example.org/book1',
       predicate: 'http://example.org/year',
       object: '"1925"'
@@ -62,22 +82,26 @@ async function backupRestoreExample() {
     console.log('-----------------------------');
 
     // Get the latest backup file
-    const fs = require('fs');
-    const path = require('path');
-    const backups = fs.readdirSync('./data/backups')
+    const backups = fs.readdirSync(backupDir)
       .filter(file => file.endsWith('.sqlite'))
       .sort()
       .reverse();
 
     if (backups.length > 0) {
-      const latestBackup = path.join('./data/backups', backups[0]);
+      const latestBackup = path.join(backupDir, backups[0]);
       console.log(`Restoring from backup: ${latestBackup}`);
 
       // Restore from the backup
-      await graphManager.restoreFromBackup(latestBackup);
+      await graph.restoreFromBackup(latestBackup);
 
       // Query to verify the restore
-      const results = await graphManager.query('http://example.org/book1');
+      const query = `
+        SELECT ?p ?o
+        WHERE {
+          <http://example.org/book1> ?p ?o
+        }
+      `;
+      const results = await graph.query(query);
       console.log('Data after restore:', results);
     }
 
@@ -86,20 +110,22 @@ async function backupRestoreExample() {
 
     // Create multiple backups to demonstrate rotation
     for (let i = 0; i < 6; i++) {
-      await graphManager.backup();
+      await graph.backup();
       console.log(`Created backup ${i + 1}`);
       await new Promise(resolve => setTimeout(resolve, 1000)); // Wait between backups
     }
 
     // List remaining backups
-    const remainingBackups = fs.readdirSync('./data/backups')
+    const remainingBackups = fs.readdirSync(backupDir)
       .filter(file => file.endsWith('.sqlite'));
     console.log(`\nRemaining backups (should be 5 or less):`, remainingBackups);
 
   } catch (error) {
     console.error('Error:', error.message);
   } finally {
-    await graphManager.close();
+    if (graph) {
+      await graph.close();
+    }
   }
 }
 

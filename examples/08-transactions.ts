@@ -1,4 +1,5 @@
 import { GraphManager, Triple } from '../src';
+import { DatabaseManager } from '../src/db/DatabaseManager';
 
 /**
  * This example demonstrates:
@@ -9,12 +10,18 @@ import { GraphManager, Triple } from '../src';
  */
 
 async function transactionExample() {
-  const graphManager = new GraphManager({
-    dbPath: ':memory:'
-  });
+  let db: DatabaseManager | null = null;
+  let graph: GraphManager | null = null;
 
   try {
-    await graphManager.init();
+    // Initialize with in-memory database
+    db = new DatabaseManager({ dbPath: ':memory:' });
+    graph = new GraphManager(db);
+    await graph.init();
+
+    if (!graph) {
+      throw new Error('Failed to initialize graph manager');
+    }
 
     console.log('Example 1: Basic Transaction');
     console.log('-------------------------');
@@ -40,11 +47,17 @@ async function transactionExample() {
 
     // Add all data in a single transaction
     try {
-      await graphManager.addTriples(authorData);
+      await graph.addTriples(authorData);
       console.log('Successfully added author data in transaction');
 
       // Verify the data
-      const results = await graphManager.query('http://example.org/author1');
+      const authorQuery = `
+        SELECT ?p ?o
+        WHERE {
+          <http://example.org/author1> ?p ?o
+        }
+      `;
+      const results = await graph.query(authorQuery);
       console.log('Author data:', results);
     } catch (error) {
       console.error('Transaction failed:', error.message);
@@ -68,12 +81,18 @@ async function transactionExample() {
     ];
 
     try {
-      await graphManager.addTriples(invalidData);
+      await graph.addTriples(invalidData);
     } catch (error) {
       console.log('Transaction rolled back:', error.message);
 
       // Verify no data was added
-      const results = await graphManager.query('http://example.org/book1');
+      const bookQuery = `
+        SELECT ?p ?o
+        WHERE {
+          <http://example.org/book1> ?p ?o
+        }
+      `;
+      const results = await graph.query(bookQuery);
       console.log('No book data after rollback:', results.length === 0);
     }
 
@@ -102,18 +121,18 @@ async function transactionExample() {
     const startIndividual = Date.now();
     const individualBooks = generateBookData(10);
     for (const book of individualBooks) {
-      await graphManager.addTriple(book);
+      await graph.addTriple(book);
     }
     console.log(`Time taken individually: ${Date.now() - startIndividual}ms`);
 
     // Clear the database
-    await graphManager.clearAll();
+    await graph.clearAll();
 
     // Add books in a single transaction (fast)
     console.log('\nAdding books in transaction...');
     const startBatch = Date.now();
     const batchBooks = generateBookData(10);
-    await graphManager.addTriples(batchBooks);
+    await graph.addTriples(batchBooks);
     console.log(`Time taken in batch: ${Date.now() - startBatch}ms`);
 
     console.log('\nExample 4: Nested Operations');
@@ -121,7 +140,7 @@ async function transactionExample() {
 
     try {
       // Start with author
-      await graphManager.addTriples([{
+      await graph.addTriples([{
         subject: 'http://example.org/author2',
         predicate: 'http://example.org/name',
         object: '"Charles Dickens"'
@@ -146,10 +165,16 @@ async function transactionExample() {
         }
       ];
 
-      await graphManager.addTriples(bookData);
+      await graph.addTriples(bookData);
 
       // Query the complete data
-      const bookResults = await graphManager.query('http://example.org/book/oliver-twist');
+      const bookQuery = `
+        SELECT ?p ?o
+        WHERE {
+          <http://example.org/book/oliver-twist> ?p ?o
+        }
+      `;
+      const bookResults = await graph.query(bookQuery);
       console.log('Complete book data:', bookResults);
 
     } catch (error) {
@@ -159,7 +184,9 @@ async function transactionExample() {
   } catch (error) {
     console.error('Error:', error.message);
   } finally {
-    await graphManager.close();
+    if (graph) {
+      await graph.close();
+    }
   }
 }
 

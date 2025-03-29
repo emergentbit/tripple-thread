@@ -1,133 +1,184 @@
 import { GraphManager } from '../src';
+import { DatabaseManager } from '../src/db/DatabaseManager';
+
+/**
+ * Error Handling Example
+ *
+ * This example demonstrates how to handle various error scenarios
+ * when working with the Tripple Thread library.
+ */
 
 async function errorHandlingExample() {
-  let graphManager: GraphManager | undefined;
+  let db: DatabaseManager | null = null;
+  let graph: GraphManager | null = null;
 
   try {
-    // Example 1: Handling database connection errors
-    console.log('Example 1: Database connection error handling');
+    // Example 1: Handle initialization errors
+    console.log('Example 1: Handling initialization errors');
     console.log('----------------------------------------');
 
     try {
-      // Attempt to connect to a non-existent directory
-      graphManager = new GraphManager({
-        dbPath: '/non/existent/path/db.sqlite'
+      // Try to initialize with an invalid database path
+      db = new DatabaseManager({ dbPath: '/invalid/path/db.sqlite' });
+      graph = new GraphManager(db);
+      await graph.init();
+    } catch (error) {
+      console.error('Failed to initialize database:', error.message);
+
+      // Fallback to in-memory database
+      console.log('\nFalling back to in-memory database...');
+      db = new DatabaseManager({ dbPath: ':memory:' });
+      graph = new GraphManager(db);
+      await graph.init();
+    }
+
+    if (!graph) {
+      throw new Error('Failed to initialize graph manager');
+    }
+    const safeGraph: GraphManager = graph;
+
+    // Example 2: Handle validation errors
+    console.log('\nExample 2: Handling validation errors');
+    console.log('------------------------------------');
+
+    if (!graph) {
+      throw new Error('Graph manager is not initialized');
+    }
+
+    try {
+      // Try to add a triple with invalid URIs
+      await graph.addTriple({
+        subject: 'invalid-uri',  // Missing http:// scheme
+        predicate: 'name',       // Missing http:// scheme
+        object: 'John'          // Not a proper literal or URI
       });
-      await graphManager.init();
     } catch (error) {
-      console.error('Failed to connect to database:', error.message);
-      // In a real application, you might want to:
-      // - Log the error
-      // - Notify monitoring systems
-      // - Try an alternative database location
-    }
+      console.error('Validation error:', error.message);
 
-    // Create a valid connection for the rest of the examples
-    graphManager = new GraphManager({
-      dbPath: ':memory:'
-    });
-    await graphManager.init();
-
-    // Example 2: Handling invalid RDF data
-    console.log('\nExample 2: Invalid RDF data handling');
-    console.log('----------------------------------');
-
-    const invalidTurtle = `
-      This is not valid Turtle format.
-      It will cause a parsing error.
-    `;
-
-    try {
-      await graphManager.importFromTurtle(invalidTurtle);
-    } catch (error) {
-      console.error('Failed to parse Turtle data:', error.message);
-      // In a real application, you might want to:
-      // - Log the parsing error
-      // - Save the invalid data for inspection
-      // - Skip the invalid data and continue with valid data
-    }
-
-    // Example 3: Handling invalid triples
-    console.log('\nExample 3: Invalid triple handling');
-    console.log('--------------------------------');
-
-    try {
-      // Attempt to add an invalid triple (missing required fields)
-      await graphManager.addTriple({
-        subject: '',  // Empty subject is invalid
+      // Add the triple with correct URI format
+      await graph.addTriple({
+        subject: 'http://example.org/person/john',
         predicate: 'http://example.org/name',
         object: '"John"'
       });
-    } catch (error) {
-      console.error('Failed to add invalid triple:', error.message);
     }
 
-    // Example 4: Transaction-like operations
-    console.log('\nExample 4: Handling batch operations');
-    console.log('----------------------------------');
+    // Example 3: Handle query errors
+    console.log('\nExample 3: Handling query errors');
+    console.log('--------------------------------');
 
-    const batchData = [
-      {
-        subject: 'http://example.org/person1',
-        predicate: 'http://example.org/name',
-        object: '"Person 1"'
-      },
-      {
-        subject: 'http://example.org/person2',
-        predicate: 'http://example.org/name',
-        object: '"Person 2"'
-      }
-    ];
-
-    try {
-      // Attempt to add all triples in a batch
-      for (const triple of batchData) {
-        await graphManager.addTriple(triple);
-      }
-    } catch (error) {
-      console.error('Failed to add batch data:', error.message);
-      // In a real application, you might want to:
-      // - Roll back previous operations
-      // - Skip failed items and continue with others
-      // - Log failed operations for retry
+    if (!graph) {
+      throw new Error('Graph manager is not initialized');
     }
 
-    // Example 5: Resource cleanup
-    console.log('\nExample 5: Resource cleanup');
-    console.log('-------------------------');
+    try {
+      // Try to query from a non-existent graph
+      const results = await graph.query('non-existent-graph');
+      console.log('Results:', results);
+    } catch (error) {
+      console.error('Query error:', error.message);
+    }
+
+    // Example 4: Handle backup errors
+    console.log('\nExample 4: Handling backup errors');
+    console.log('--------------------------------');
+
+    if (!graph) {
+      throw new Error('Graph manager is not initialized');
+    }
 
     try {
-      // Perform some operations that might fail
-      const turtle = await graphManager.exportToTurtle();
-      console.log('Successfully exported data:', turtle);
+      // Try to backup without enabling backup functionality
+      await graph.backup();
     } catch (error) {
-      console.error('Operation failed:', error.message);
-    } finally {
-      // Always clean up resources, even if operations fail
-      if (graphManager) {
-        try {
-          await graphManager.close();
-          console.log('Successfully closed database connection');
-        } catch (error) {
-          console.error('Failed to close database:', error.message);
-          // In a real application, you might want to:
-          // - Log the error
-          // - Force close any remaining connections
-          // - Notify system administrators
+      console.error('Backup error:', error.message);
+
+      // Create a new graph manager with backup enabled
+      const dbWithBackup = new DatabaseManager({
+        dbPath: ':memory:',
+        backup: {
+          enabled: true,
+          interval: 3600000,  // 1 hour
+          maxBackups: 24,     // Keep last 24 backups
+          path: './backups'
         }
+      });
+      const graphWithBackup = new GraphManager(dbWithBackup);
+      await graphWithBackup.init();
+      await graphWithBackup.backup();
+      await graphWithBackup.close();
+    }
+
+    // Example 5: Handle concurrent operations
+    console.log('\nExample 5: Handling concurrent operations');
+    console.log('---------------------------------------');
+
+    if (!graph) {
+      throw new Error('Graph manager is not initialized');
+    }
+
+    const concurrentBatch = Array(100).fill(null).map((_, i) => ({
+      subject: `http://example.org/item${i}`,
+      predicate: 'http://schema.org/position',
+      object: `"${i}"`
+    }));
+
+    try {
+      // Try to execute too many concurrent operations
+      await Promise.all(
+        concurrentBatch.map(triple => safeGraph.addTriple(triple))
+      );
+    } catch (error) {
+      console.error('Concurrent operations error:', error.message);
+
+      // Create a new graph manager with proper connection pool settings
+      const dbWithPool = new DatabaseManager({
+        dbPath: ':memory:',
+        maxConnections: 10  // Limit concurrent connections
+      });
+      const graphWithPool = new GraphManager(dbWithPool);
+      await graphWithPool.init();
+
+      // Process in smaller batches
+      const batchSize = 10;
+      for (let i = 0; i < concurrentBatch.length; i += batchSize) {
+        const currentBatch = concurrentBatch.slice(i, i + batchSize);
+        await Promise.all(
+          currentBatch.map(triple => graphWithPool.addTriple(triple))
+        );
       }
+
+      await graphWithPool.close();
+    }
+
+    // Example 6: Handle cleanup errors
+    console.log('\nExample 6: Handling cleanup errors');
+    console.log('--------------------------------');
+
+    if (!graph) {
+      throw new Error('Graph manager is not initialized');
+    }
+
+    try {
+      // Try to delete a non-existent graph
+      await graph.deleteGraph('non-existent-graph');
+    } catch (error) {
+      console.error('Cleanup error:', error.message);
     }
 
   } catch (error) {
-    // Handle any unexpected errors
     console.error('Unexpected error:', error.message);
-    throw error;  // Re-throw if you want to propagate the error
+  } finally {
+    // Always try to close the connection, even if there were errors
+    if (graph) {
+      try {
+        await graph.close();
+      } catch (error) {
+        console.error('Error during cleanup:', error.message);
+      }
+    }
   }
 }
 
-// Run the example with proper error handling
-errorHandlingExample()
-  .catch(error => {
-    console.error('Example failed:', error);
-    process.exit(1);  // Exit with error code in case of failure
-  });
+// Run the example
+errorHandlingExample().catch(console.error);

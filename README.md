@@ -25,26 +25,43 @@ npm install @emergentbit/tripple-thread
 ```typescript
 import { GraphManager } from '@emergentbit/tripple-thread';
 
-// Initialize the graph manager
-const graph = new GraphManager({ dbPath: 'mydb.sqlite' });
+// Initialize with in-memory database for quick testing
+const graph = new GraphManager();
 await graph.init();
 
-// Add a triple
+// Define common prefixes
+const ex = 'http://example.org/';
+const rdf = 'http://www.w3.org/1999/02/22-rdf-syntax-ns#';
+const rdfs = 'http://www.w3.org/2000/01/rdf-schema#';
+const schema = 'http://schema.org/';
+
+// Add some triples about a person
 await graph.addTriple({
-  subject: 'http://example.org/john',
-  predicate: 'http://example.org/name',
-  object: '"John Doe"',
-  graph: 'people'  // Optional graph name
+  subject: `${ex}john`,
+  predicate: `${rdf}type`,
+  object: `${schema}Person`
 });
 
-// Query triples
+await graph.addTriple({
+  subject: `${ex}john`,
+  predicate: `${schema}name`,
+  object: '"John Doe"'
+});
+
+await graph.addTriple({
+  subject: `${ex}john`,
+  predicate: `${schema}email`,
+  object: '"john@example.org"'
+});
+
+// Query all information about John
 const results = await graph.query(
-  'http://example.org/john',  // subject
-  undefined,                  // any predicate
-  undefined,                  // any object
-  'people'                   // graph name
+  `${ex}john`,  // subject
+  undefined,    // any predicate
+  undefined     // any object
 );
 
+console.log(results);
 // Close when done
 await graph.close();
 ```
@@ -54,64 +71,157 @@ await graph.close();
 ### Working with Named Graphs
 
 ```typescript
-// Add triple to a specific graph
-await graph.addTriple({
-  subject: 'http://example.org/john',
-  predicate: 'http://example.org/name',
-  object: '"John Doe"'
-}, 'people');
+import { GraphManager } from '@emergentbit/tripple-thread';
 
-// Import Turtle data
-const turtle = `
-  @prefix ex: <http://example.org/> .
-  ex:jane ex:name "Jane Smith" .
-  ex:jane ex:age "28"^^<http://www.w3.org/2001/XMLSchema#integer> .
+const graph = new GraphManager({ dbPath: 'knowledge-base.sqlite' });
+await graph.init();
+
+// Add organization data to a specific graph
+const orgGraph = 'http://example.org/graphs/organizations';
+
+// Import organization data using Turtle format
+const orgData = `
+@prefix org: <http://example.org/org/> .
+@prefix schema: <http://schema.org/> .
+@prefix rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#> .
+
+org:emergentbit rdf:type schema:Organization ;
+    schema:name "EmergentBit" ;
+    schema:url "https://emergentbit.com" ;
+    schema:employee org:john .
+
+org:john rdf:type schema:Person ;
+    schema:name "John Doe" ;
+    schema:jobTitle "Software Engineer" ;
+    schema:email "john@emergentbit.com" .
 `;
-await graph.importFromTurtle(turtle, 'people');
 
-// Query all triples in a graph
-const allPeople = await graph.query(
-  undefined,
-  undefined,
-  undefined,
-  'people'
+await graph.importFromTurtle(orgData, orgGraph);
+
+// Query all employees
+const employees = await graph.query(
+  undefined,                          // any subject
+  'http://schema.org/employee',       // predicate
+  undefined,                          // any object
+  orgGraph                           // from org graph
 );
 
-// Export graph to Turtle
-const exported = await graph.exportToTurtle('people');
+// Export the entire organization graph
+const exportedTurtle = await graph.exportToTurtle(orgGraph);
+```
+
+### Working with Multiple Graphs
+
+```typescript
+// Add data to different graphs for better organization
+const peopleGraph = 'http://example.org/graphs/people';
+const projectsGraph = 'http://example.org/graphs/projects';
+
+// Add person data
+await graph.addTriple({
+  subject: 'http://example.org/jane',
+  predicate: 'http://schema.org/name',
+  object: '"Jane Smith"',
+  graph: peopleGraph
+});
+
+// Add project data
+await graph.addTriple({
+  subject: 'http://example.org/project1',
+  predicate: 'http://schema.org/name',
+  object: '"Project Alpha"',
+  graph: projectsGraph
+});
+
+// Link person to project
+await graph.addTriple({
+  subject: 'http://example.org/project1',
+  predicate: 'http://schema.org/member',
+  object: 'http://example.org/jane',
+  graph: projectsGraph
+});
+
+// List all available graphs
+const graphs = await graph.queryGraphs();
+console.log('Available graphs:', graphs);
+
+// Query across multiple graphs
+const janeData = await Promise.all([
+  graph.query('http://example.org/jane', undefined, undefined, peopleGraph),
+  graph.query(undefined, 'http://schema.org/member', 'http://example.org/jane', projectsGraph)
+]);
 ```
 
 ### Backup and Restore
 
 ```typescript
-// Enable backup with options
+// Initialize with backup enabled
 const graph = new GraphManager({
-  dbPath: 'mydb.sqlite',
+  dbPath: 'production.sqlite',
   enableBackup: true,
-  backupPath: './backups'
+  backupPath: './backups',
+  maxConnections: 5
 });
 
-// Create backup
-await graph.backup();
+try {
+  await graph.init();
 
-// Restore from backup
-await graph.restoreFromBackup('./backups/mydb_20240304.sqlite');
+  // Perform some operations
+  await graph.addTriple({
+    subject: 'http://example.org/product1',
+    predicate: 'http://schema.org/name',
+    object: '"Amazing Product"'
+  });
+
+  // Create timestamped backup
+  await graph.backup();
+
+} catch (error) {
+  console.error('Error:', error);
+
+  // Restore from most recent backup if needed
+  const backupFile = './backups/production_20240304_120000.sqlite';
+  await graph.restoreFromBackup(backupFile);
+
+} finally {
+  await graph.close();
+}
 ```
 
-### Connection Pooling
+### Connection Pooling and Concurrent Operations
 
 ```typescript
-// Configure connection pool
+// Initialize with connection pool settings
 const graph = new GraphManager({
-  dbPath: 'mydb.sqlite',
-  maxConnections: 5  // Default is 10
+  dbPath: 'concurrent.sqlite',
+  maxConnections: 10
 });
 
-// Connections are automatically managed
-const promises = Array(10).fill(0).map(() =>
-  graph.query(undefined, undefined, undefined)
-);
-await Promise.all(promises);  // Concurrent queries are handled efficiently
+await graph.init();
+
+try {
+  // Prepare batch of operations
+  const batch = Array(20).fill(null).map((_, i) => ({
+    subject: `http://example.org/item${i}`,
+    predicate: 'http://schema.org/position',
+    object: `"${i}"`
+  }));
+
+  // Execute concurrent operations
+  await Promise.all(
+    batch.map(triple => graph.addTriple(triple))
+  );
+
+  // Perform concurrent queries
+  const results = await Promise.all([
+    graph.query(undefined, 'http://schema.org/position', undefined),
+    graph.query('http://example.org/item1', undefined, undefined),
+    graph.query(undefined, undefined, '"10"')
+  ]);
+
+} finally {
+  await graph.close();
+}
 ```
 
 ## API Reference

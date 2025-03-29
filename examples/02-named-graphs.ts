@@ -1,135 +1,154 @@
 import { GraphManager } from '../src';
+import { DatabaseManager } from '../src/db/DatabaseManager';
+
+/**
+ * Named Graphs Example
+ *
+ * This example demonstrates how to work with named graphs in the Tripple Thread library.
+ * Named graphs allow you to organize and partition your RDF data into separate contexts.
+ */
 
 async function namedGraphsExample() {
-  // Create a new GraphManager instance
-  const graphManager = new GraphManager({
-    dbPath: ':memory:'
-  });
+  // Initialize with in-memory database for quick testing
+  const db = new DatabaseManager({ dbPath: ':memory:' });
+  const graph = new GraphManager(db);
 
   try {
-    // Initialize the database
-    await graphManager.init();
+    await graph.init();
 
-    // Example 1: Adding data to different graphs
-    console.log('Example 1: Adding data to different graphs');
-    console.log('---------------------------------------');
+    // Define common prefixes for cleaner code
+    const ex = 'http://example.org/';
+    const rdf = 'http://www.w3.org/1999/02/22-rdf-syntax-ns#';
+    const schema = 'http://schema.org/';
+    const org = 'http://example.org/organization#';
 
-    // Add data about movies to a "movies" graph
-    await graphManager.addTriple(
+    // Add organization data to a specific graph
+    const orgGraph = 'organization';
+    await graph.addTriples([
       {
-        subject: 'http://example.org/movie/inception',
-        predicate: 'http://example.org/title',
-        object: '"Inception"'
+        subject: `${org}company`,
+        predicate: `${rdf}type`,
+        object: `${schema}Organization`
       },
-      'movies'  // Specify the graph name
-    );
-
-    await graphManager.addTriple(
       {
-        subject: 'http://example.org/movie/inception',
-        predicate: 'http://example.org/director',
-        object: 'http://example.org/person/nolan'
+        subject: `${org}company`,
+        predicate: `${schema}name`,
+        object: '"Acme Corporation"'
       },
-      'movies'
-    );
-
-    // Add data about people to a "people" graph
-    await graphManager.addTriple(
       {
-        subject: 'http://example.org/person/nolan',
-        predicate: 'http://example.org/name',
-        object: '"Christopher Nolan"'
-      },
-      'people'
-    );
-
-    // Example 2: Importing data into specific graphs
-    console.log('\nExample 2: Importing Turtle data into specific graphs');
-    console.log('------------------------------------------------');
-
-    // Import more movie data
-    const movieData = `
-      @prefix movie: <http://example.org/movie/> .
-      @prefix pred: <http://example.org/> .
-
-      movie:inception pred:releaseYear "2010" ;
-                     pred:genre "Science Fiction" .
-
-      movie:interstellar pred:title "Interstellar" ;
-                        pred:releaseYear "2014" ;
-                        pred:director <http://example.org/person/nolan> .
-    `;
-
-    // Import more people data
-    const peopleData = `
-      @prefix person: <http://example.org/person/> .
-      @prefix pred: <http://example.org/> .
-
-      person:nolan pred:birthYear "1970" ;
-                  pred:nationality "British" .
-    `;
-
-    // Import data into their respective graphs
-    await graphManager.importFromTurtle(movieData, 'movies');
-    await graphManager.importFromTurtle(peopleData, 'people');
-
-    // Example 3: Querying specific graphs
-    console.log('\nExample 3: Querying specific graphs');
-    console.log('--------------------------------');
-
-    // Query all movies directed by Nolan
-    const nolanMovies = await graphManager.query(
-      undefined,
-      'http://example.org/director',
-      'http://example.org/person/nolan',
-      'movies'  // Only search in the movies graph
-    );
-    console.log('Movies directed by Nolan:', nolanMovies);
-
-    // Query information about Nolan from the people graph
-    const nolanInfo = await graphManager.query(
-      'http://example.org/person/nolan',
-      undefined,
-      undefined,
-      'people'  // Only search in the people graph
-    );
-    console.log('\nInformation about Nolan:', nolanInfo);
-
-    // Example 4: Exporting specific graphs
-    console.log('\nExample 4: Exporting specific graphs');
-    console.log('--------------------------------');
-
-    console.log('\nMovies graph:');
-    console.log(await graphManager.exportToTurtle('movies'));
-
-    console.log('\nPeople graph:');
-    console.log(await graphManager.exportToTurtle('people'));
-
-    // Example 5: Deleting from specific graphs
-    console.log('\nExample 5: Deleting from specific graphs');
-    console.log('------------------------------------');
-
-    // Delete a movie from the movies graph
-    await graphManager.query(
-      'http://example.org/movie/inception',
-      'http://example.org/title',
-      '"Inception"',
-      'movies'
-    ).then(triples => {
-      if (triples.length > 0) {
-        return graphManager.addTriple({
-          ...triples[0],
-          _delete: true
-        }, 'movies');
+        subject: `${org}company`,
+        predicate: `${schema}foundingDate`,
+        object: '"2000-01-01"^^<http://www.w3.org/2001/XMLSchema#date>'
       }
-    });
+    ], orgGraph);
 
-    console.log('\nMovies graph after deletion:');
-    console.log(await graphManager.exportToTurtle('movies'));
+    // Add employee data to a different graph
+    const employeeGraph = 'employees';
+    await graph.addTriples([
+      {
+        subject: `${ex}alice`,
+        predicate: `${rdf}type`,
+        object: `${schema}Person`
+      },
+      {
+        subject: `${ex}alice`,
+        predicate: `${schema}name`,
+        object: '"Alice Smith"'
+      },
+      {
+        subject: `${ex}alice`,
+        predicate: `${schema}worksFor`,
+        object: `${org}company`
+      },
+      {
+        subject: `${ex}bob`,
+        predicate: `${rdf}type`,
+        object: `${schema}Person`
+      },
+      {
+        subject: `${ex}bob`,
+        predicate: `${schema}name`,
+        object: '"Bob Jones"'
+      },
+      {
+        subject: `${ex}bob`,
+        predicate: `${schema}worksFor`,
+        object: `${org}company`
+      }
+    ], employeeGraph);
 
+    // Add project data to another graph
+    const projectGraph = 'projects';
+    await graph.addTriples([
+      {
+        subject: `${ex}project1`,
+        predicate: `${rdf}type`,
+        object: `${schema}Project`
+      },
+      {
+        subject: `${ex}project1`,
+        predicate: `${schema}name`,
+        object: '"Project Alpha"'
+      },
+      {
+        subject: `${ex}project1`,
+        predicate: `${schema}member`,
+        object: `${ex}alice`
+      },
+      {
+        subject: `${ex}project2`,
+        predicate: `${rdf}type`,
+        object: `${schema}Project`
+      },
+      {
+        subject: `${ex}project2`,
+        predicate: `${schema}name`,
+        object: '"Project Beta"'
+      },
+      {
+        subject: `${ex}project2`,
+        predicate: `${schema}member`,
+        object: `${ex}bob`
+      }
+    ], projectGraph);
+
+    // Query and display data from different graphs
+    console.log('\nOrganization Data:');
+    const orgData = await graph.query(orgGraph);
+    console.log(orgData);
+
+    console.log('\nEmployee Data:');
+    const employeeData = await graph.query(employeeGraph);
+    console.log(employeeData);
+
+    console.log('\nProject Data:');
+    const projectData = await graph.query(projectGraph);
+    console.log(projectData);
+
+    // List all available graphs
+    console.log('\nAvailable Graphs:');
+    const graphs = await graph.queryGraphs();
+    console.log(graphs);
+
+    // Export data from each graph as Turtle
+    for (const graphName of graphs) {
+      console.log(`\nData in graph '${graphName}' as Turtle:`);
+      const turtle = await graph.exportToTurtle(graphName);
+      console.log(turtle);
+    }
+
+    // Delete a specific graph
+    console.log('\nDeleting project graph...');
+    await graph.deleteGraph(projectGraph);
+
+    // Verify the graph was deleted
+    const remainingGraphs = await graph.queryGraphs();
+    console.log('\nRemaining graphs:', remainingGraphs);
+
+  } catch (error) {
+    console.error('Error:', error);
   } finally {
-    // Always close the database connection when done
-    await graphManager.close();
+    await graph.close();
   }
 }
 

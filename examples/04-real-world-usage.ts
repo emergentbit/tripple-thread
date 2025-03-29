@@ -1,4 +1,5 @@
 import { GraphManager } from '../src';
+import { DatabaseManager } from '../src/db/DatabaseManager';
 
 /**
  * This example demonstrates how to use the library to build a movie knowledge graph.
@@ -25,16 +26,28 @@ const genreUri = (id: string) => `${URI.GENRE}/${id}`;
 const predicate = (name: string) => `${URI.PRED}/${name}`;
 
 async function movieDatabaseExample() {
-  const graphManager = new GraphManager({
-    dbPath: 'movie_db.sqlite',
-    enableBackup: true,
-    backupPath: './backups',
-    maxConnections: 5
-  });
+  let db: DatabaseManager | null = null;
+  let graph: GraphManager | null = null;
 
   try {
-    // Initialize the database
-    await graphManager.init();
+    // Initialize the database with backup enabled
+    db = new DatabaseManager({
+      dbPath: 'movie_db.sqlite',
+      maxConnections: 5,
+      backup: {
+        enabled: true,
+        path: './backups',
+        interval: 3600000,  // 1 hour
+        maxBackups: 24      // Keep last 24 backups
+      }
+    });
+
+    graph = new GraphManager(db);
+    await graph.init();
+
+    if (!graph) {
+      throw new Error('Failed to initialize graph manager');
+    }
 
     // Example 1: Setting up the movie database structure
     console.log('Example 1: Setting up movie database');
@@ -55,7 +68,7 @@ async function movieDatabaseExample() {
                   pred:description "Character and plot driven stories" .
     `;
 
-    await graphManager.importFromTurtle(genreData, 'genres');
+    await graph.importFromTurtle(genreData, 'genres');
 
     // Example 2: Adding a movie with all its relationships
     console.log('\nExample 2: Adding a complete movie entry');
@@ -63,19 +76,19 @@ async function movieDatabaseExample() {
 
     // Add movie details
     const inceptionId = 'inception-2010';
-    graphManager.addTriple({
+    graph.addTriple({
       subject: movieUri(inceptionId),
       predicate: predicate('title'),
       object: '"Inception"'
     }, 'movies');
 
-    graphManager.addTriple({
+    graph.addTriple({
       subject: movieUri(inceptionId),
       predicate: predicate('releaseYear'),
       object: '"2010"'
     }, 'movies');
 
-    graphManager.addTriple({
+    graph.addTriple({
       subject: movieUri(inceptionId),
       predicate: predicate('genre'),
       object: genreUri('scifi')
@@ -83,13 +96,13 @@ async function movieDatabaseExample() {
 
     // Add director
     const nolanId = 'christopher-nolan';
-    graphManager.addTriple({
+    graph.addTriple({
       subject: personUri(nolanId),
       predicate: predicate('name'),
       object: '"Christopher Nolan"'
     }, 'people');
 
-    graphManager.addTriple({
+    graph.addTriple({
       subject: movieUri(inceptionId),
       predicate: predicate('director'),
       object: personUri(nolanId)
@@ -110,37 +123,41 @@ async function movieDatabaseExample() {
                           pred:actor person:joseph-gordon-levitt .
     `;
 
-    await graphManager.importFromTurtle(castData, 'people');
+    await graph.importFromTurtle(castData, 'people');
 
     // Example 3: Complex queries
     console.log('\nExample 3: Running complex queries');
     console.log('--------------------------------');
 
     // Find all actors in the movie
-    const actors = graphManager.query(
-      movieUri(inceptionId),
-      predicate('actor'),
-      undefined,
-      'movies'
-    );
-
+    const actorsQuery = `
+      SELECT ?actor
+      WHERE {
+        <${movieUri(inceptionId)}> <${predicate('actor')}> ?actor
+      }
+      FROM movies
+    `;
+    const actors = await graph.query(actorsQuery);
     console.log('Inception actors:', actors);
 
     // Get movie genre information
-    const movieGenre = graphManager.query(
-      movieUri(inceptionId),
-      predicate('genre'),
-      undefined,
-      'movies'
-    )[0];
+    const movieGenreQuery = `
+      SELECT ?genre
+      WHERE {
+        <${movieUri(inceptionId)}> <${predicate('genre')}> ?genre
+      }
+      FROM movies
+    `;
+    const movieGenre = (await graph.query(movieGenreQuery))[0];
 
-    const genreInfo = graphManager.query(
-      movieGenre.object,
-      undefined,
-      undefined,
-      'genres'
-    );
-
+    const genreInfoQuery = `
+      SELECT ?p ?o
+      WHERE {
+        <${movieGenre.object}> ?p ?o
+      }
+      FROM genres
+    `;
+    const genreInfo = await graph.query(genreInfoQuery);
     console.log('\nMovie genre information:', genreInfo);
 
     // Example 4: Adding another movie by the same director
@@ -165,43 +182,45 @@ async function movieDatabaseExample() {
                              pred:actor person:anne-hathaway .
     `;
 
-    await graphManager.importFromTurtle(interstellarData, 'movies');
+    await graph.importFromTurtle(interstellarData, 'movies');
 
     // Example 5: Finding connections
     console.log('\nExample 5: Finding connections between entities');
     console.log('-------------------------------------------');
 
     // Find all movies by Christopher Nolan
-    const nolanMovies = graphManager.query(
-      undefined,
-      predicate('director'),
-      personUri(nolanId),
-      'movies'
-    );
-
+    const nolanMoviesQuery = `
+      SELECT ?movie
+      WHERE {
+        ?movie <${predicate('director')}> <${personUri(nolanId)}>
+      }
+      FROM movies
+    `;
+    const nolanMovies = await graph.query(nolanMoviesQuery);
     console.log('Movies directed by Christopher Nolan:', nolanMovies);
 
     // Find all sci-fi movies
-    const scifiMovies = graphManager.query(
-      undefined,
-      predicate('genre'),
-      genreUri('scifi'),
-      'movies'
-    );
-
+    const scifiMoviesQuery = `
+      SELECT ?movie
+      WHERE {
+        ?movie <${predicate('genre')}> <${genreUri('scifi')}>
+      }
+      FROM movies
+    `;
+    const scifiMovies = await graph.query(scifiMoviesQuery);
     console.log('\nAll sci-fi movies:', scifiMovies);
 
     // Export the entire movie database
     console.log('\nComplete movie database in Turtle format:');
     console.log('\nMovies graph:');
-    console.log(await graphManager.exportToTurtle('movies'));
+    console.log(await graph.exportToTurtle('movies'));
     console.log('\nPeople graph:');
-    console.log(await graphManager.exportToTurtle('people'));
+    console.log(await graph.exportToTurtle('people'));
     console.log('\nGenres graph:');
-    console.log(await graphManager.exportToTurtle('genres'));
+    console.log(await graph.exportToTurtle('genres'));
 
   } finally {
-    graphManager.close();
+    graph?.close();
   }
 }
 

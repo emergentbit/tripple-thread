@@ -1,92 +1,100 @@
 import { GraphManager } from '../src';
+import { DatabaseManager } from '../src/db/DatabaseManager';
 
-async function basicUsageExample() {
-  // Create a new GraphManager instance
-  // Using an in-memory database for this example
-  const graphManager = new GraphManager({
-    dbPath: ':memory:'
-  });
+/**
+ * Basic Usage Example
+ *
+ * This example demonstrates the basic usage of the Tripple Thread library,
+ * including initialization, adding triples, and querying data.
+ */
+
+async function basicExample() {
+  // Initialize with in-memory database for quick testing
+  const db = new DatabaseManager({ dbPath: ':memory:' });
+  const graph = new GraphManager(db);
 
   try {
-    // Initialize the database
-    await graphManager.init();
+    await graph.init();
 
-    // Example 1: Adding individual triples
-    console.log('Example 1: Adding and querying individual triples');
-    console.log('----------------------------------------------');
+    // Define common prefixes for cleaner code
+    const ex = 'http://example.org/';
+    const rdf = 'http://www.w3.org/1999/02/22-rdf-syntax-ns#';
+    const rdfs = 'http://www.w3.org/2000/01/rdf-schema#';
+    const schema = 'http://schema.org/';
+    const foaf = 'http://xmlns.com/foaf/0.1/';
 
-    // Add information about a person
-    await graphManager.addTriple({
-      subject: 'http://example.org/john',
-      predicate: 'http://example.org/name',
-      object: '"John Doe"'  // Literal values are wrapped in quotes
+    // Add basic information about a person
+    await graph.addTriple({
+      subject: `${ex}john`,
+      predicate: `${rdf}type`,
+      object: `${schema}Person`
     });
 
-    await graphManager.addTriple({
-      subject: 'http://example.org/john',
-      predicate: 'http://example.org/age',
-      object: '"30"'
+    await graph.addTriple({
+      subject: `${ex}john`,
+      predicate: `${schema}name`,
+      object: '"John Doe"'
     });
 
-    // Query all triples about John
-    const johnTriples = await graphManager.query('http://example.org/john');
-    console.log('All triples about John:', johnTriples);
-    console.log();
+    await graph.addTriple({
+      subject: `${ex}john`,
+      predicate: `${schema}email`,
+      object: '"john@example.org"'
+    });
 
-    // Example 2: Working with RDF Turtle format
-    console.log('Example 2: Importing and exporting Turtle data');
-    console.log('-------------------------------------------');
+    // Add more detailed information
+    await graph.addTriple({
+      subject: `${ex}john`,
+      predicate: `${schema}jobTitle`,
+      object: '"Software Engineer"'
+    });
 
-    // Import data about multiple people using Turtle format
-    const turtleData = `
-      @prefix ex: <http://example.org/> .
-      @prefix foaf: <http://xmlns.com/foaf/0.1/> .
+    await graph.addTriple({
+      subject: `${ex}john`,
+      predicate: `${schema}birthDate`,
+      object: '"1990-01-01"^^<http://www.w3.org/2001/XMLSchema#date>'
+    });
 
-      ex:jane
-        foaf:name "Jane Smith" ;
-        foaf:age "28" ;
-        foaf:knows ex:john .
+    // Add social connections
+    await graph.addTriple({
+      subject: `${ex}john`,
+      predicate: `${foaf}knows`,
+      object: `${ex}jane`
+    });
 
-      ex:bob
-        foaf:name "Bob Wilson" ;
-        foaf:age "35" ;
-        foaf:knows ex:jane .
-    `;
+    // Query all information about John
+    console.log('\nAll information about John:');
+    const allTriples = await graph.query();
+    const johnInfo = allTriples.filter(triple => triple.subject === `${ex}john`);
+    console.log(johnInfo);
 
-    // Import the Turtle data
-    await graphManager.importFromTurtle(turtleData);
-
-    // Query all triples about Jane
-    const janeTriples = graphManager.query('http://example.org/jane');
-    console.log('All triples about Jane:', janeTriples);
-    console.log();
-
-    // Example 3: Querying with different patterns
-    console.log('Example 3: Advanced querying');
-    console.log('-------------------------');
-
-    // Find all "knows" relationships
-    const knowsTriples = graphManager.query(
-      undefined,  // any subject
-      'http://xmlns.com/foaf/0.1/knows',  // "knows" predicate
-      undefined  // any object
+    // Query by type
+    console.log('\nAll Persons:');
+    const persons = allTriples.filter(triple =>
+      triple.predicate === `${rdf}type` &&
+      triple.object === `${schema}Person`
     );
-    console.log('All "knows" relationships:', knowsTriples);
-    console.log();
+    console.log(persons);
 
-    // Example 4: Exporting data
-    console.log('Example 4: Exporting all data as Turtle');
-    console.log('-----------------------------------');
+    // Query social connections
+    console.log('\nPeople John knows:');
+    const connections = allTriples.filter(triple =>
+      triple.subject === `${ex}john` &&
+      triple.predicate === `${foaf}knows`
+    );
+    console.log(connections);
 
-    // Export all data in Turtle format
-    const exportedTurtle = await graphManager.exportToTurtle();
-    console.log(exportedTurtle);
+    // Export all data as Turtle
+    console.log('\nAll data as Turtle:');
+    const turtle = await graph.exportToTurtle();
+    console.log(turtle);
 
+  } catch (error) {
+    console.error('Error:', error);
   } finally {
-    // Always close the database connection when done
-    graphManager.close();
+    await graph.close();
   }
 }
 
 // Run the example
-basicUsageExample().catch(console.error);
+basicExample().catch(console.error);

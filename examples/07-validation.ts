@@ -1,4 +1,5 @@
 import { GraphManager, ValidationError, isValidLiteral, isValidUri } from '../src';
+import { DatabaseManager } from '../src/db/DatabaseManager';
 
 /**
  * This example demonstrates:
@@ -9,12 +10,18 @@ import { GraphManager, ValidationError, isValidLiteral, isValidUri } from '../sr
  */
 
 async function validationExample() {
-  const graphManager = new GraphManager({
-    dbPath: ':memory:'
-  });
+  let db: DatabaseManager | null = null;
+  let graph: GraphManager | null = null;
 
   try {
-    await graphManager.init();
+    // Initialize with in-memory database
+    db = new DatabaseManager({ dbPath: ':memory:' });
+    graph = new GraphManager(db);
+    await graph.init();
+
+    if (!graph) {
+      throw new Error('Failed to initialize graph manager');
+    }
 
     console.log('Example 1: URI Validation');
     console.log('----------------------');
@@ -80,7 +87,7 @@ async function validationExample() {
 
     // Try adding valid triple
     try {
-      await graphManager.addTriple({
+      await graph.addTriple({
         subject: 'http://example.org/book',
         predicate: 'http://example.org/title',
         object: '"The Book"'
@@ -92,7 +99,7 @@ async function validationExample() {
 
     // Try adding triple with invalid subject
     try {
-      await graphManager.addTriple({
+      await graph.addTriple({
         subject: 'not a uri',
         predicate: 'http://example.org/title',
         object: '"The Book"'
@@ -105,7 +112,7 @@ async function validationExample() {
 
     // Try adding triple with invalid predicate
     try {
-      await graphManager.addTriple({
+      await graph.addTriple({
         subject: 'http://example.org/book',
         predicate: 'invalid predicate',
         object: '"The Book"'
@@ -118,7 +125,7 @@ async function validationExample() {
 
     // Try adding triple with invalid object
     try {
-      await graphManager.addTriple({
+      await graph.addTriple({
         subject: 'http://example.org/book',
         predicate: 'http://example.org/title',
         object: 'not a proper literal or uri'
@@ -148,7 +155,7 @@ async function validationExample() {
     ];
 
     try {
-      await graphManager.addTriples(mixedTriples);
+      await graph.addTriples(mixedTriples);
     } catch (error) {
       if (error instanceof ValidationError) {
         console.log('Batch operation failed:', error.message);
@@ -159,7 +166,7 @@ async function validationExample() {
   } catch (error) {
     console.error('Error:', error.message);
   } finally {
-    await graphManager.close();
+    await graph?.close();
   }
 }
 
